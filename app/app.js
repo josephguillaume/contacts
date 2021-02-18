@@ -353,18 +353,18 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
 
             triples = new $rdf.Serializer(g).toN3(g);
 
-            $http({
+            solidAuthFetcher.fetch(
+                $scope.contact.datasource.uri,{
                 method: 'POST',
-                url: $scope.contact.datasource.uri,
-                withCredentials: true,
                 headers: {
                     "Content-Type": "text/turtle"
                 },
-                data: triples
+                body: triples
             }).
-                success(function (data, status, headers) {
-                    if (headers('Location')) {
-                        $scope.contact.uri = headers('Location') + "#card";
+                then(function (response) {
+                    let {headers} = response;
+                    if (headers.get('Location')) {
+                        $scope.contact.uri = headers.get('Location') + "#card";
                         delete $scope.contact.pictureFile;
                         $scope.contacts[$scope.contact.uri] = angular.copy($scope.contact);
                         $scope.hideContactInformation();
@@ -372,7 +372,7 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                         $scope.notify('success', 'Contact added');
                     }
                 }).
-                error(function (data, status, headers) {
+                catch(function (data, status, headers) {
                     console.log('Error saving contact on sever - ' + status, data);
                     $scope.notify('error', 'Failed to write contact to server -- HTTP ' + status);
                 });
@@ -419,18 +419,16 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
         }
 
         function deleteContact(uri) {
-            $http({
+            solidAuthFetcher.fetch(uri,{
                 method: 'DELETE',
-                url: uri,
-                withCredentials: true
             }).
-                success(function (data, status, headers) {
+                then(function (response) {
                     delete $scope.contacts[uri];
                     $scope.notify('success', 'Contact deleted');
                      // save modified contacts list
                     $scope.saveLocalStorage();
                 }).
-                error(function (data, status) {
+                catch(function (data, status) {
                     if (status === 404) {
                         delete $scope.contacts[uri];
                         $scope.saveLocalStorage();
@@ -1059,21 +1057,21 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
             if (!uri || !query || uri.length === 0 || query.length ===0) {
                 resolve(-1);
             } else {
-                $http({
+                solidAuthFetcher.fetch(uri,{
                   method: 'PATCH',
-                  url: uri,
                   headers: {
                     'Content-Type': 'application/sparql-update'
                   },
-                  withCredentials: true,
-                  data: query
-                }).success(function(data, status, headers) {
+                  body: query
+                }).then(function(response) {
+                    let {status} = response;
                     if (obj) {
                         obj.locked = false;
                         obj.uploading = false;
                     }
                     resolve(status);
-                }).error(function(data, status, headers) {
+                }).catch(function(response) {
+                    let {status}=response;
                     if (obj) {
                         obj.locked = false;
                         obj.uploading = false;
@@ -1113,25 +1111,24 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                         resolve(resp);
                     } else {
                         // just go ahead and create a new container
-                        $http({
+                        solidAuthFetcher.fetch(uri,{
                             method: 'POST',
-                            url: uri,
                             headers: {
                                 'Content-Type': 'text/turtle',
                                 'Link': linkHeader,
                                 'Slug': slug
                             },
-                            withCredentials: true,
-                            data: metadata
-                        }).success(function(data, status, headers) {
-                            if (headers("Location") && headers("Location").length > 0) {
-                                containerURI = headers("Location");
+                            body: metadata
+                        }).then(function(response) {
+                            let { status, headers } = response;
+                            if (headers.get("Location") && headers.get("Location").length > 0) {
+                                containerURI = headers.get("Location");
                             }
                             resp.code = status;
                             resp.location = containerURI;
                             resolve(resp);
-                        }).error(function(data, status, headers) {
-                            resp.code = status;
+                        }).catch(function(response) {
+                            resp.code = response.status;
                             resp.location = containerURI;
                             resolve(resp);
                         });
@@ -1161,19 +1158,18 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                 }
             }
             var triples = new $rdf.Serializer(g).toN3(g);
-            $http({
+            solidAuthFetcher.fetch($scope.my.config.appWorkspace,{
                 method: 'POST',
-                url: $scope.my.config.appWorkspace,
-                withCredentials: true,
                 headers: {
                     "Content-Type": "text/turtle",
                     "Slug": "Contacts"
                 },
-                data: triples
+                body: triples
             }).
-            success(function(data, status, headers) {
-                if (headers('Location')) {
-                    $scope.my.config.uri = headers('Location');
+            then(function(response) {
+                let {headers} = response;
+                if (headers.get('Location')) {
+                    $scope.my.config.uri = response.url + headers.get('Location').slice(1);
                 } else {
                     $scope.my.config.uri = $scope.my.config.appWorkspace + "Contacts";
                 }
@@ -1186,7 +1182,7 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                 }
                 $scope.contacts = {};
             }).
-            error(function(data, status, headers) {
+            catch(function(data, status, headers) {
                 console.log('Error - '+status, data);
                 $scope.notify('error', 'Failed to create config file -- HTTP '+status);
             });
@@ -1426,28 +1422,30 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
         $location.path('/').search({}).replace();
         $scope.loginTLSButtonText = 'Logging in...';
         console.log("AUTH:",AUTHENDPOINT);
-        $http({
-          method: 'HEAD',
-          url: AUTHENDPOINT,
-          withCredentials: true
-        }).success(function(data, status, headers) {
-          // add dir to local list
-          var user = headers('User');
-          console.log("USER:",user);
-          if (user && user.length > 0 && user.slice(0,4) == 'http') {
-            $scope.loggedIn = true;
-            $scope.getProfile(user);
-          } else {
-            LxNotificationService.error('WebID-TLS authentication failed.');
-            console.log('WebID-TLS authentication failed.');
-          }
-          $scope.loginTLSButtonText = 'Login';
-        }).error(function(data, status, headers) {
+        solidAuthFetcher.login({
+            oidcIssuer: AUTHENDPOINT,
+            popUp: false,
+            redirect: window.location.href
+          }).catch(function(data, status, headers) {
             LxNotificationService.error('Could not connect to auth server: HTTP '+status);
             console.log('Could not connect to auth server: HTTP '+status);
             $scope.loginTLSButtonText = 'Login';
         });
     };
+
+    solidAuthFetcher.onSession(session => {
+        // add dir to local list
+        if (session && session.loggedIn) {
+          var user = session.webId;
+          console.log("USER:",user);
+          $scope.loggedIn = true;
+          $scope.getProfile(user);
+        } else {
+          LxNotificationService.error('Authentication failed.');
+          console.log('Authentication failed.');
+        }
+        $scope.loginTLSButtonText = 'Login';
+      })
 
     // Signup
     $scope.signup = function() {
