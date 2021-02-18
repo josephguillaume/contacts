@@ -7,7 +7,8 @@
 
 */
 var SIGNUP = "https://solid.github.io/solid-idps/";
-var AUTHENDPOINT = "https://databox.me/";
+//FIXME: shouldn't be hard coded
+var AUTHENDPOINT = "https://solidcommunity.net/";
 var PROXY = "https://rww.io/proxy.php?uri={uri}";
 var TIMEOUT = 5000;
 var DEBUG = true;
