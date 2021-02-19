@@ -353,6 +353,12 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
 
             triples = new $rdf.Serializer(g).toN3(g);
 
+            /*
+            PATCH group file
+            ; n:hasMember <5e33f4e0-71fd-11eb-bb00-7f0f8d8df2d5.ttl#card>, <b96cd720-71fb-11eb-bb00-7f0f8d8df2d5.ttl#card>.
+            <5e33f4e0-71fd-11eb-bb00-7f0f8d8df2d5.ttl#card> n:fn "Jane Blogg".
+            <b96cd720-71fb-11eb-bb00-7f0f8d8df2d5.ttl#card> n:fn "Joe Blogg".
+            */
             solidAuthFetcher.fetch(
                 $scope.contact.datasource.uri,{
                 method: 'POST',
@@ -823,76 +829,88 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
     };
 
     // load contacts from a data source
-    $scope.loadContacts = function(uri, refresh) {
+    $scope.loadContacts = async function(uri, refresh) {
         var g = new $rdf.graph();
+        //TODO: pass credentials
         var f = new $rdf.fetcher(g, TIMEOUT);
         $scope.loadingText = "...Loading contacts form "+uri;
-        return new Promise(function(resolve) {
-            f.nowOrWhenFetched(uri+'*',undefined,function(ok, body, xhr) {
-                if (!$scope.refreshContacts) {
-                    $scope.refreshContacts = [];
-                }
-                var contacts = g.statementsMatching(undefined, RDF('type'), VCARD('Individual'));
-                if (contacts && contacts.length > 0) {
-                    for (var i=0; i<contacts.length; i++) {
-                        var subject = contacts[i].subject;
-                        var contact = {};
-                        contact.id = i;
-                        contact.uri = subject.value;
-                        contact.datasource = { uri: uri };
+        let asyncFetch=(uri)=>new Promise((resolve,reject)=>f.nowOrWhenFetched(uri,undefined,(ok)=>ok?resolve():reject()))
+        await asyncFetch(uri);
+        if (!$scope.refreshContacts) {
+            $scope.refreshContacts = [];
+        }
+        var contacts;
+        var groupindex = g.statementsMatching(undefined, VCARD('groupIndex'), undefined);
+        if(groupindex){
+            await asyncFetch(groupindex[0].object.uri);
+            //TODO: should really find the groupindex object first
+            var groups = g.statementsMatching(undefined, VCARD('includesGroup'), undefined);
+        }
+        if(groups){
+            await asyncFetch(groups[0].object.uri);
+            //TODO: more than just first group
+            contacts = g.statementsMatching(groups[0].object, VCARD('hasMember'), undefined);
+            await Promise.all(contacts.map(c=>asyncFetch(c.object.uri)))
+        }
+        // var contacts = g.statementsMatching(undefined, RDF('type'), VCARD('Individual'));
+        if (contacts && contacts.length > 0) {
+            for (var i=0; i<contacts.length; i++) {
+                var subject = contacts[i].object;
+                var contact = {};
+                contact.id = i;
+                contact.uri = subject.value;
+                contact.datasource = { uri: uri };
 
-                        // save list of URIs to check if some must be removed
-                        $scope.refreshContacts.push(contact.uri);
-                        // create a new element for a contact
-                        var newElement = function(arr, elem) {
-                            if (arr.length > 0) {
-                                contact[elem.name] = [];
-                                for (var i=0; i<arr.length; i++) {
-                                    // Set the right why value to subject value if it's an ldp#resource
-                                    var ldpRes = g.statementsMatching($rdf.sym(uri+'*'), LDP('contains'), subject);
-                                    if (ldpRes.length > 0) {
-                                        arr[i].why.uri = arr[i].why.value = subject.value;
-                                    }
-                                    contact[elem.name].push($scope.ContactElement(arr[i], true));
-                                }
-                            }
-                        };
-
-                        $scope.vcardElems.forEach(function(elem) {
-                            newElement(g.statementsMatching(subject, VCARD(elem.name), undefined), elem);
-                        });
-
-                        // set favorite value
-                        var fav = g.statementsMatching($rdf.sym($scope.my.webid), FAV('hasFavorite'), subject);
-                        if (fav.length > 0) {
+                // save list of URIs to check if some must be removed
+                $scope.refreshContacts.push(contact.uri);
+                // create a new element for a contact
+                var newElement = function(arr, elem) {
+                    if (arr.length > 0) {
+                        contact[elem.name] = [];
+                        for (var i=0; i<arr.length; i++) {
+                            // Set the right why value to subject value if it's an ldp#resource
                             var ldpRes = g.statementsMatching($rdf.sym(uri+'*'), LDP('contains'), subject);
                             if (ldpRes.length > 0) {
-                                var why = subject.value;
-                            } else {
-                                var why = contacts[i].why.value;
+                                arr[i].why.uri = arr[i].why.value = subject.value;
                             }
-                            contact['hasFavorite'] = [ $scope.ContactElement(
-                                    new $rdf.st($rdf.sym($scope.my.webid), FAV('hasFavorite'), subject, $rdf.sym(why)),
-                                    true
-                                ) ];
+                            contact[elem.name].push($scope.ContactElement(arr[i], true));
                         }
-
-                        // push contact to list
-                        $scope.contacts[contact.uri] = contact;
                     }
+                };
+
+                $scope.vcardElems.forEach(function(elem) {
+                    newElement(g.statementsMatching(subject, VCARD(elem.name), undefined), elem);
+                });
+
+                // set favorite value
+                var fav = g.statementsMatching($rdf.sym($scope.my.webid), FAV('hasFavorite'), subject);
+                if (fav.length > 0) {
+                    var ldpRes = g.statementsMatching($rdf.sym(uri+'*'), LDP('contains'), subject);
+                    if (ldpRes.length > 0) {
+                        var why = subject.value;
+                    } else {
+                        var why = contacts[i].why.value;
+                    }
+                    contact['hasFavorite'] = [ $scope.ContactElement(
+                            new $rdf.st($rdf.sym($scope.my.webid), FAV('hasFavorite'), subject, $rdf.sym(why)),
+                            true
+                        ) ];
                 }
-                $scope.sourcesToLoad--;
-                if ($scope.sourcesToLoad===0) {
-                    $scope.my.config.loaded = true;
-                    $scope.removeContactsAfterRefresh(uri);
-                } else if (refresh) {
-                    $scope.removeContactsAfterRefresh(uri);
-                }
-                $scope.saveLocalStorage();
-                $scope.$apply();
-                resolve(contacts.length);
-            });
-        });
+
+                // push contact to list
+                $scope.contacts[contact.uri] = contact;
+            }
+        }
+        $scope.sourcesToLoad--;
+        if ($scope.sourcesToLoad===0) {
+            $scope.my.config.loaded = true;
+            $scope.removeContactsAfterRefresh(uri);
+        } else if (refresh) {
+            $scope.removeContactsAfterRefresh(uri);
+        }
+        $scope.saveLocalStorage();
+        $scope.$apply();
+        return(contacts.length);
     };
 
     $scope.setParentWorkspace = function (uri) {
@@ -1230,6 +1248,10 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
         var triples, g = new $rdf.graph();
         g.add($rdf.sym(''), RDF('type'), VCARD('AddressBook'));
         triples = new $rdf.Serializer(g).toN3(g);
+        /* TODO
+        n0: n:groupIndex n0:; n:includesGroup :list.
+        :list a n:Group; n:fn "Default".
+        */
 
         $scope.newContainer(workspace, name, triples, 'ldpc', VCARD('AddressBook').value).then(function(status) {
             if (status.code === 200 || status.code === 201) {
