@@ -893,6 +893,13 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                 var newElement = function(arr, elem) {
                     if (arr.length > 0) {
                         contact[elem.name] = [];
+
+                        // Deduplicate statements
+                        let gdup=$rdf.graph(); 
+                        let unique_statements = Array.from(new Set(arr.map(x=>x.toNT())));
+                        unique_statements.forEach(s=>$rdf.parse(s,gdup,subject.uri.replace(/#.*/,""),"text/turtle"));
+                        arr=gdup.statements;
+
                         for (var i=0; i<arr.length; i++) {
                             // Set the right why value to subject value if it's an ldp#resource
                             var ldpRes = g.statementsMatching($rdf.sym(uri+'*'), LDP('contains'), subject);
