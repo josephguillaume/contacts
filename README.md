@@ -1,18 +1,19 @@
 # contacts
 
-## Warning : contacts app needs updating in order to work with the currently deployed 4.x version of node solid server
+Address book-like application to manage contact information. 
 
-[![Join the chat at https://gitter.im/linkeddata/contacts](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/linkeddata/contacts?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+Forked from https://github.com/linkeddata/contacts to use `solid-auth-fetcher` and `contacts-pane` compatible schema.
 
-Address book-like application to manage contact information.
+Addressbooks (`VCARD:AddressBook`) are stored in a `pim:Workspace`, linked from a `pim:PreferencesWorkspace` (e.g. `/Applications/`) specified in the user's `pim:preferencesFile`. Contacts are loaded by looking for a `VCARD:groupindex` and its `VCARD:group`(s).
 
-Running live here: https://linkeddata.github.io/contacts/
+Note that contacts from the previous version will not be loaded without a new `VCARD:groupindex` and `VCARD:group` (they were previously loaded by globbing from the `VCARD:AddressBook`).
+
 
 Quick Start for contributors
 ----------------------------
 
 ```
-$ git clone git://github.com/linkeddata/contacts
+$ git clone git://github.com/josephguillaume/contacts
 $ cd contacts
 $ sudo npm -g install bower
 $ bower install
