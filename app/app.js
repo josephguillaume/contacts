@@ -114,7 +114,7 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
         { name: 'hasEmail', label: 'Email', icon: 'email', type: 'email', prefixURI: 'mailto:', link: true, textarea: false, display: true, unique: false},
         { name: 'hasTelephone', label: 'Phone', icon: 'phone', type: 'tel', prefixURI: 'tel:', link: true, textarea: false, display: true, unique: false},
         { name: 'hasURL', label: 'URL', icon: 'link', type: 'url', link: true, textarea: false, display: true, unique: false},
-        { name: 'hasNote', label: 'Note', icon: 'file-document', link: false, textarea: true, display: true, unique: true },
+        { name: 'note', label: 'Note', icon: 'file-document', link: false, textarea: true, display: true, unique: true },
         { name: 'hasFavorite', label: 'Favorite', icon: 'star-outline', link: true, textarea: false, display: false, unique: true }
     ];
     $scope.vcardElems.isUnique = function (name) {
