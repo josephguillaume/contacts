@@ -80,6 +80,7 @@
                   <div ng-repeat="item in contact[elem.name]" class="truncate">
                     <span ng-if="!elem.link">{{item.value}}</span>
                     <a ng-if="elem.link" href="{{elem.prefixURI+item.value}}">{{item.value}}</a>
+                    <span ng-if="item.value_type">({{item.value_type}})</span>
                   </div>
               </div>
             </div>

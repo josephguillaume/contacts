@@ -35,9 +35,11 @@
         </div>
         <div class="display-block fs-body-1 tc-black-2">
           {{contact.hasEmail[0].value}}
+          <span ng-if="contact.hasEmail[0].value_type">({{contact.hasEmail[0].value_type}})</span>
         </div>
         <div class="display-block fs-body-1 tc-black-2">
-          {{contact.hasTelephone[0].value}}
+          {{contact.hasTelephone[0].value}} 
+          <span ng-if="contact.hasTelephone[0].value_type">({{contact.hasTelephone[0].value_type}})</span>
         </div>
       </div>
 

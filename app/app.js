@@ -205,14 +205,21 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
     };
 
     // Contact element object
-    $scope.ContactElement = function (s, exists) {
-        var val, element = {};
+    $scope.ContactElement = function (s, exists, extras) {
+        var val, value_type, element = {};
         element.failed = false;
         element.value = '';
         element.prev = '';
         element.statement = s;
-        if (s && s.object.value) {
+        if (s && extras && extras.length>0){
+            val = extras.filter(x=>x.predicate.uri=="http://www.w3.org/2006/vcard/ns#value");
+            val = val.length>0 ? val[0].object.value : undefined;
+            value_type = extras.filter(x=>x.predicate.uri=="http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+            if(value_type.length>0) element.value_type = value_type[0].object.value;
+        } else if (s && s.object.value) {
             val = decodeURIComponent(s.object.value);
+        }
+        if(val){
             if (val.indexOf('tel:') >= 0) {
                 val = val.slice(4, val.length);
             } else if (val.indexOf('mailto:') >= 0) {
@@ -892,7 +899,11 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                             if (ldpRes.length > 0) {
                                 arr[i].why.uri = arr[i].why.value = subject.value;
                             }
-                            contact[elem.name].push($scope.ContactElement(arr[i], true));
+                            var extras;
+                            if(arr[i].object.uri){
+                                extras = g.statementsMatching(arr[i].object,undefined,undefined);
+                            }
+                            contact[elem.name].push($scope.ContactElement(arr[i], true, extras));
                         }
                     }
                 };
