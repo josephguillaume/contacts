@@ -434,36 +434,45 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
             return;
         }
 
-        function deleteContact(uri) {
-            solidAuthFetcher.fetch(uri,{
-                method: 'DELETE',
-            }).
-                then(function (response) {
+        async function deleteContact(uri) {
+            try {
+                var {status,statusText} = await solidAuthFetcher.fetch(uri,{
+                    method: 'DELETE',
+                })
+
+                if (status===200 || status === 404) {
+                    // Update group list
+                    let delQuery = "DELETE DATA { " + 
+                    new $rdf.st($rdf.sym('#list'), 
+                                VCARD('hasMember'), 
+                                $rdf.sym(uri)) +
+                    new $rdf.st($rdf.sym(uri), 
+                                VCARD('fn'), 
+                                //TODO: deal with missing fn
+                                $rdf.lit($scope.contacts[uri]["fn"][0].value)) +
+                                " };";
+                    //TODO: deal with non-folder data source and separate group list
+                    let patchStatus = await $scope.sendSPARQLPatch($scope.contacts[uri].datasource.uri+".meta", delQuery);
+                    if(patchStatus!=200) throw "Patch error "+patchStatus;
+
                     delete $scope.contacts[uri];
-                    $scope.notify('success', 'Contact deleted');
-                     // save modified contacts list
+                    // save modified contacts list
                     $scope.saveLocalStorage();
-                }).
-                catch(function (data, status) {
-                    if (status === 404) {
-                        delete $scope.contacts[uri];
-                        $scope.saveLocalStorage();
-                        $scope.notify('success', 'Contact deleted');
-                        console.log($scope.contacts);
-                    } else if (status === 401) {
-                        $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + status);
-                        console.log('Forbidden', 'Authentication required to delete ' + uri);
-                    } else if (status === 403) {
-                        $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + status);
-                        console.log('Forbidden', 'You are not allowed to delete ' + uri);
-                    } else if (status === 409) {
-                        $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + status);
-                        console.log('Failed', 'Conflict detected. In case of directory, check if not empty.');
-                    } else {
-                        $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + status);
-                        console.log('Failed '+status, data);
-                    }
-                });
+                    $scope.notify('success', 'Contact deleted');
+                } else if (status === 401) {
+                    $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + statusText);
+                    console.log('Forbidden', 'Authentication required to delete ' + uri);
+                } else if (status === 403) {
+                    $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + statusText);
+                    console.log('Forbidden', 'You are not allowed to delete ' + uri);
+                } else if (status === 409) {
+                    $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + statusText);
+                    console.log('Failed', 'Conflict detected. In case of directory, check if not empty.');
+                }
+            } catch(e) {
+                    $scope.notify('error', 'Failed to delete contact from server -- HTTP ' + e);
+                    console.log('Failed '+e);
+            };
         };
 
         for (var i in ids) {
