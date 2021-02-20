@@ -859,7 +859,7 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
         var g = new $rdf.graph();
         //TODO: pass credentials
         var f = new $rdf.fetcher(g, TIMEOUT);
-        $scope.loadingText = "...Loading contacts form "+uri;
+        $scope.loadingText = "...Loading contacts from "+uri;
         let asyncFetch=(uri)=>new Promise((resolve,reject)=>f.nowOrWhenFetched(uri,undefined,(ok)=>ok?resolve():reject()))
         await asyncFetch(uri);
         if (!$scope.refreshContacts) {
@@ -877,7 +877,7 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
             //TODO: more than just first group
             contacts = g.statementsMatching(groups[0].object, VCARD('hasMember'), undefined);
             await Promise.all(contacts.map(c=>{
-                asyncFetch(c.object.uri).catch(x=>console.log("Error with "+c.object.uri))
+                return asyncFetch(c.object.uri).catch(x=>console.log("Error with "+c.object.uri))
             }))
         }
         // var contacts = g.statementsMatching(undefined, RDF('type'), VCARD('Individual'));
@@ -897,10 +897,13 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                         contact[elem.name] = [];
 
                         // Deduplicate statements
-                        let gdup=$rdf.graph(); 
-                        let unique_statements = Array.from(new Set(arr.map(x=>x.toNT())));
-                        unique_statements.forEach(s=>$rdf.parse(s,gdup,subject.uri.replace(/#.*/,""),"text/turtle"));
-                        arr=gdup.statements;
+                        // TODO: blank nodes can cause problems, but doesn't really make sense anyway
+                        if(!arr.map(x=>x.object.isBlank).some(x=>x)){
+                            let gdup=$rdf.graph(); 
+                            let unique_statements = Array.from(new Set(arr.map(x=>x.toNT())));
+                            unique_statements.forEach(s=>$rdf.parse(s,gdup,subject.uri.replace(/#.*/,""),"text/turtle"));
+                            arr=gdup.statements;
+                        }
 
                         for (var i=0; i<arr.length; i++) {
                             // Set the right why value to subject value if it's an ldp#resource
@@ -909,7 +912,7 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
                                 arr[i].why.uri = arr[i].why.value = subject.value;
                             }
                             var extras;
-                            if(arr[i].object.uri){
+                            if(arr[i].object.uri || arr[i].object.isBlank){
                                 extras = g.statementsMatching(arr[i].object,undefined,undefined);
                             }
                             contact[elem.name].push($scope.ContactElement(arr[i], true, extras));
