@@ -876,7 +876,9 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
             await asyncFetch(groups[0].object.uri);
             //TODO: more than just first group
             contacts = g.statementsMatching(groups[0].object, VCARD('hasMember'), undefined);
-            await Promise.all(contacts.map(c=>asyncFetch(c.object.uri)))
+            await Promise.all(contacts.map(c=>{
+                asyncFetch(c.object.uri).catch(x=>console.log("Error with "+c.object.uri))
+            }))
         }
         // var contacts = g.statementsMatching(undefined, RDF('type'), VCARD('Individual'));
         if (contacts && contacts.length > 0) {
@@ -962,6 +964,7 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
     };
 
     $scope.getNameFromParentWS = function (uri) {
+        // TODO: does not deal with nested workspaces
         for (var i in $scope.my.config.availableWorkspaces) {
             var ws = $scope.my.config.availableWorkspaces[i];
             if (uri.indexOf(ws.uri) >= 0) {
