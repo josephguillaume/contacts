@@ -304,29 +304,29 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
         $scope.showContactInformation('edit');
     };
 
-    $scope.saveContact = function (force) {
+    $scope.saveContact = async function (force) {
         // contact exists => patching it
         if ($scope.contact.uri !== undefined) {
-            var query = $scope.updateContact($scope.contact, force).then(function (status) {
-                if (status === -1) {
-                    $scope.notify('error', 'Failed to update contact', status);
-                } else if (status >= 200 && status < 400) {
-                    var uri;
-                    for (uri in $scope.contacts) {
-                        if (uri === $scope.contact.uri) {
-                            delete $scope.contact.pictureFile;
-                            $scope.contacts[uri] = angular.copy($scope.contact);
-                        }
+            var status = await $scope.updateContact($scope.contact, force);
+            if (status === -1) {
+                $scope.notify('error', 'Failed to update contact', status);
+            } else if (status >= 200 && status < 400) {
+                var uri;
+                for (uri in $scope.contacts) {
+                    if (uri === $scope.contact.uri) {
+                        delete $scope.contact.pictureFile;
+                        $scope.contacts[uri] = angular.copy($scope.contact);
                     }
-                    $scope.saveLocalStorage();
-                    $scope.notify('success', 'Contact updated');
-                    $scope.hideContactInformation();
-                    $scope.selectNone();
-                    $scope.$apply();
-                } else {
-                    $scope.notify('error', 'Failed to update contact -- HTTP', status);
                 }
-            });
+                $scope.saveLocalStorage();
+                $scope.notify('success', 'Contact updated');
+                $scope.hideContactInformation();
+                $scope.selectNone();
+                $scope.$apply();
+            } else {
+                $scope.notify('error', 'Failed to update contact -- HTTP', status);
+            }
+            
         } else {
             // writing new contact
             var triples, g = new $rdf.graph();
@@ -353,35 +353,45 @@ App.controller('Main', function ($scope, $http, $timeout, $window, $location, Lx
 
             triples = new $rdf.Serializer(g).toN3(g);
 
-            /*
-            PATCH group file
-            ; n:hasMember <5e33f4e0-71fd-11eb-bb00-7f0f8d8df2d5.ttl#card>, <b96cd720-71fb-11eb-bb00-7f0f8d8df2d5.ttl#card>.
-            <5e33f4e0-71fd-11eb-bb00-7f0f8d8df2d5.ttl#card> n:fn "Jane Blogg".
-            <b96cd720-71fb-11eb-bb00-7f0f8d8df2d5.ttl#card> n:fn "Joe Blogg".
-            */
-            solidAuthFetcher.fetch(
-                $scope.contact.datasource.uri,{
-                method: 'POST',
-                headers: {
-                    "Content-Type": "text/turtle"
-                },
-                body: triples
-            }).
-                then(function (response) {
-                    let {headers} = response;
-                    if (headers.get('Location')) {
-                        $scope.contact.uri = headers.get('Location') + "#card";
-                        delete $scope.contact.pictureFile;
-                        $scope.contacts[$scope.contact.uri] = angular.copy($scope.contact);
-                        $scope.hideContactInformation();
-                        $scope.saveLocalStorage();
-                        $scope.notify('success', 'Contact added');
-                    }
-                }).
-                catch(function (data, status, headers) {
-                    console.log('Error saving contact on sever - ' + status, data);
-                    $scope.notify('error', 'Failed to write contact to server -- HTTP ' + status);
-                });
+            try {
+                var response = await solidAuthFetcher.fetch(
+                    $scope.contact.datasource.uri,{
+                    method: 'POST',
+                    headers: {
+                        "Content-Type": "text/turtle"
+                    },
+                    body: triples
+                })
+                let {headers} = response;
+                
+                
+                if (headers.get('Location')) {
+                    $scope.contact.uri = new URL(response.url).origin + headers.get('Location') + "#card";
+           
+                    // PATCH group file
+                    // TODO: deal with group file separate from datasource
+                    let insQuery = "INSERT DATA { " + 
+                    new $rdf.st($rdf.sym('#list'), 
+                                VCARD('hasMember'), 
+                                $rdf.sym($scope.contact.uri)) +
+                    new $rdf.st($rdf.sym($scope.contact.uri), 
+                                VCARD('fn'), 
+                                //TODO: deal with missing fn
+                                $rdf.lit($scope.contact["fn"][0].value)) +
+                                 " };";
+                    let patchStatus = await $scope.sendSPARQLPatch($scope.contact.datasource.uri+".meta", insQuery);
+                    if(patchStatus!=200) throw "Patch error "+patchStatus;
+           
+                    delete $scope.contact.pictureFile;
+                    $scope.contacts[$scope.contact.uri] = angular.copy($scope.contact);
+                    $scope.hideContactInformation();
+                    $scope.saveLocalStorage();
+                    $scope.notify('success', 'Contact added');
+                }
+            } catch(e) {
+                    console.log('Error saving contact on server - ' + e);
+                    $scope.notify('error', 'Failed to write contact to server -- HTTP ' + e);
+            };
         }
     };
 
